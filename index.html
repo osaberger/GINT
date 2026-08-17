@@ -3347,33 +3347,28 @@ async function showResults() {
   const avgEl     = document.getElementById('stat-class-avg');
   const subEl     = document.getElementById('stat-class-sub');
 
-  if (!getSB()) {
+  hintEl.style.display = 'none';
+  fetchClassStats(topicKey).then(stats => {
     loadingEl.style.display = 'none';
-    hintEl.style.display = 'block';
-    avgEl.textContent = '—';
-  } else {
-    fetchClassStats(topicKey).then(stats => {
-      loadingEl.style.display = 'none';
-      if (stats) {
-        avgEl.textContent = stats.avg + '%';
-        subEl.innerHTML = `based on ${stats.n.toLocaleString()} attempt${stats.n !== 1 ? 's' : ''}`;
-        // Comparison vs personal
-        const diff = pct - stats.avg;
-        if (diff > 0) {
-          subEl.innerHTML +=
-            ` · <span style="color:var(--green);font-weight:700">+${diff}% above average</span>`;
-        } else if (diff < 0) {
-          subEl.innerHTML +=
-            ` · <span style="color:var(--orange);font-weight:700">${diff}% below average</span>`;
-        } else {
-          subEl.innerHTML += ` · <span style="color:var(--gray)">exactly average</span>`;
-        }
+    if (stats) {
+      avgEl.textContent = stats.avg + '%';
+      subEl.innerHTML = `based on ${stats.n.toLocaleString()} attempt${stats.n !== 1 ? 's' : ''}`;
+      // Comparison vs personal
+      const diff = pct - stats.avg;
+      if (diff > 0) {
+        subEl.innerHTML +=
+          ` · <span style="color:var(--green);font-weight:700">+${diff}% above average</span>`;
+      } else if (diff < 0) {
+        subEl.innerHTML +=
+          ` · <span style="color:var(--orange);font-weight:700">${diff}% below average</span>`;
       } else {
-        avgEl.textContent = '—';
-        subEl.textContent = 'No data yet for this selection';
+        subEl.innerHTML += ` · <span style="color:var(--gray)">exactly average</span>`;
       }
-    });
-  }
+    } else {
+      avgEl.textContent = '—';
+      subEl.textContent = 'No data yet for this selection';
+    }
+  });
 
   // ── Topic breakdown ─────────────────────────────────────────────────────
   const tSum = document.getElementById('topic-summary');
@@ -5561,26 +5556,21 @@ async function showExamResults() {
   const hintEl    = document.getElementById('exam-db-hint');
   const avgEl     = document.getElementById('exam-class-avg');
   const subEl     = document.getElementById('exam-class-sub');
-  if (!getSB()) {
+  hintEl.style.display = 'none';
+  fetchClassStats(histKey).then(stats => {
     loadingEl.style.display = 'none';
-    hintEl.style.display    = 'block';
-    avgEl.textContent       = '—';
-  } else {
-    fetchClassStats(histKey).then(stats => {
-      loadingEl.style.display = 'none';
-      if (stats) {
-        avgEl.textContent = stats.avg + '%';
-        subEl.innerHTML   = `based on ${stats.n.toLocaleString()} attempt${stats.n !== 1 ? 's' : ''}`;
-        const diff = pct - stats.avg;
-        if (diff > 0)      subEl.innerHTML += ` · <span style="color:var(--green);font-weight:700">+${diff}% above average</span>`;
-        else if (diff < 0) subEl.innerHTML += ` · <span style="color:var(--orange);font-weight:700">${diff}% below average</span>`;
-        else               subEl.innerHTML += ` · <span style="color:var(--gray)">exactly average</span>`;
-      } else {
-        avgEl.textContent = '—';
-        subEl.textContent = 'no data yet';
-      }
-    }).catch(() => { loadingEl.style.display = 'none'; avgEl.textContent = '—'; });
-  }
+    if (stats) {
+      avgEl.textContent = stats.avg + '%';
+      subEl.innerHTML   = `based on ${stats.n.toLocaleString()} attempt${stats.n !== 1 ? 's' : ''}`;
+      const diff = pct - stats.avg;
+      if (diff > 0)      subEl.innerHTML += ` · <span style="color:var(--green);font-weight:700">+${diff}% above average</span>`;
+      else if (diff < 0) subEl.innerHTML += ` · <span style="color:var(--orange);font-weight:700">${diff}% below average</span>`;
+      else               subEl.innerHTML += ` · <span style="color:var(--gray)">exactly average</span>`;
+    } else {
+      avgEl.textContent = '—';
+      subEl.textContent = 'no data yet';
+    }
+  }).catch(() => { loadingEl.style.display = 'none'; avgEl.textContent = '—'; });
 
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('exam-results-screen').classList.add('active');
