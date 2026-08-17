@@ -5964,6 +5964,30 @@ renderHistoMenu();
 loadSessionsFromStorage();
 updateResumeUI();
 
+// Save live session state immediately before page unloads (refresh / close)
+window.addEventListener('beforeunload', function() {
+  // Save live MCQ quiz state
+  if (quizPauseable && questions.length > 0 && current < questions.length) {
+    const pg = getSessionGroup(questions);
+    if (pg) pausedSessions[pg] = {
+      questions:    [...questions],
+      current, score, answered,
+      topicStats:   JSON.parse(JSON.stringify(topicStats)),
+      wrongIndices: [...wrongIndices],
+      returnScreen: quizReturnScreen,
+    };
+  }
+  // Save live BGA state
+  if (bgaPauseable) {
+    pausedBGASession = { bgaCaseIdx, bgaCaseOrder: [...bgaCaseOrder], bgaStep, bgaScore, bgaTotalScore, bgaTotalSteps };
+  }
+  // Save live Histo state
+  if (histoPauseable) {
+    pausedHistoSession = { histoCaseIdx, histoStep, histoScore, completedCases: [...histoCompletedCases], wrongCount: {...histoCaseWrongCount} };
+  }
+  saveSessionsToStorage();
+});
+
 </script>
 </body>
 </html>
