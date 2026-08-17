@@ -2666,16 +2666,29 @@ const TOPIC_LABELS = {
 };
 const TOPIC_COLORS = { fluid: "#1565C0", sodium: "#1A6B7E", potassium: "#E65100", acid: "#2E7D32", glomerular: "#4527A0", stones: "#880E4F", mix_ckd_aki: "#0277BD", mix_htn: "#0277BD", mix_gn: "#0277BD", mix_genetics: "#0277BD" };
 
-// ── Visitor counter (localStorage, per-session deduplication) ──
+// ── Visitor counter (shared via counterapi.dev, localStorage fallback) ──
 (function() {
+  const el = document.getElementById('visit-count');
+  const COUNTER_URL = 'https://api.counterapi.dev/v1/graz-imtraining-at/visits';
   if (!sessionStorage.getItem('visited')) {
     sessionStorage.setItem('visited', '1');
-    const n = parseInt(localStorage.getItem('visitCount') || '0', 10) + 1;
-    localStorage.setItem('visitCount', n);
+    fetch(COUNTER_URL + '/up')
+      .then(r => r.json())
+      .then(data => { if (el) el.textContent = parseInt(data.count, 10).toLocaleString() + ' visits'; })
+      .catch(() => {
+        const n = parseInt(localStorage.getItem('visitCount') || '0', 10) + 1;
+        localStorage.setItem('visitCount', n);
+        if (el) el.textContent = n.toLocaleString() + ' visits';
+      });
+  } else {
+    fetch(COUNTER_URL + '/get')
+      .then(r => r.json())
+      .then(data => { if (el) el.textContent = parseInt(data.count, 10).toLocaleString() + ' visits'; })
+      .catch(() => {
+        const count = localStorage.getItem('visitCount') || '1';
+        if (el) el.textContent = parseInt(count, 10).toLocaleString() + ' visits';
+      });
   }
-  const count = localStorage.getItem('visitCount') || '1';
-  const el = document.getElementById('visit-count');
-  if (el) el.textContent = parseInt(count, 10).toLocaleString() + ' visits';
 })();
 
 let questions = [];
@@ -3064,8 +3077,36 @@ function updateResumeUI() {
     const bgaStartBtn = document.getElementById('btn-start-bga');
     if (bgaStartBtn) bgaStartBtn.style.display = pausedBGASession ? 'none' : '';
   }
+  saveSessionsToStorage();
 }
 
+
+// ── Session persistence across page reloads ──
+const LS_SESSIONS_KEY = 'git_paused_sessions_v1';
+
+function saveSessionsToStorage() {
+  try {
+    localStorage.setItem(LS_SESSIONS_KEY, JSON.stringify({
+      pausedSessions,
+      pausedBGASession,
+      pausedHistoSession,
+    }));
+  } catch(e) {}
+}
+
+function loadSessionsFromStorage() {
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_SESSIONS_KEY));
+    if (!data) return;
+    if (data.pausedSessions) {
+      Object.keys(pausedSessions).forEach(k => {
+        if (data.pausedSessions[k]) { pausedSessions[k] = data.pausedSessions[k]; quizPauseable = true; }
+      });
+    }
+    if (data.pausedBGASession)   { pausedBGASession   = data.pausedBGASession;   bgaPauseable   = true; }
+    if (data.pausedHistoSession) { pausedHistoSession = data.pausedHistoSession; histoPauseable = true; }
+  } catch(e) {}
+}
 
 function setExamVignette(on) {
   const v = document.getElementById('exam-vignette');
@@ -5918,6 +5959,10 @@ function showHistoResult() {
 
 // Init histology menu
 renderHistoMenu();
+
+// Restore any paused sessions from previous page load
+loadSessionsFromStorage();
+updateResumeUI();
 
 </script>
 </body>
