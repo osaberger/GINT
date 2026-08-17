@@ -2666,29 +2666,16 @@ const TOPIC_LABELS = {
 };
 const TOPIC_COLORS = { fluid: "#1565C0", sodium: "#1A6B7E", potassium: "#E65100", acid: "#2E7D32", glomerular: "#4527A0", stones: "#880E4F", mix_ckd_aki: "#0277BD", mix_htn: "#0277BD", mix_gn: "#0277BD", mix_genetics: "#0277BD" };
 
-// ── Visitor counter (shared via counterapi.dev, localStorage fallback) ──
+// ── Visitor counter (localStorage, per-session deduplication) ──
 (function() {
-  const el = document.getElementById('visit-count');
-  const COUNTER_URL = 'https://api.counterapi.dev/v1/graz-imtraining-at/visits';
   if (!sessionStorage.getItem('visited')) {
     sessionStorage.setItem('visited', '1');
-    fetch(COUNTER_URL + '/up')
-      .then(r => r.json())
-      .then(data => { if (el) el.textContent = parseInt(data.count, 10).toLocaleString() + ' visits'; })
-      .catch(() => {
-        const n = parseInt(localStorage.getItem('visitCount') || '0', 10) + 1;
-        localStorage.setItem('visitCount', n);
-        if (el) el.textContent = n.toLocaleString() + ' visits';
-      });
-  } else {
-    fetch(COUNTER_URL + '/get')
-      .then(r => r.json())
-      .then(data => { if (el) el.textContent = parseInt(data.count, 10).toLocaleString() + ' visits'; })
-      .catch(() => {
-        const count = localStorage.getItem('visitCount') || '1';
-        if (el) el.textContent = parseInt(count, 10).toLocaleString() + ' visits';
-      });
+    const n = parseInt(localStorage.getItem('visitCount') || '0', 10) + 1;
+    localStorage.setItem('visitCount', n);
   }
+  const count = localStorage.getItem('visitCount') || '1';
+  const el = document.getElementById('visit-count');
+  if (el) el.textContent = parseInt(count, 10).toLocaleString() + ' visits';
 })();
 
 let questions = [];
