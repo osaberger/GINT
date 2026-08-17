@@ -2621,31 +2621,26 @@ function historyForKey(topicKey) {
 //   CREATE POLICY "anon_insert" ON quiz_attempts FOR INSERT WITH CHECK (true);
 // ═══════════════════════════════════════════════════════════════════════════
 async function submitScoreToDB(attempt) {
-  const sb = getSB();
-  if (!sb) return;
+  // Batch-submit all first-attempt results in one Worker call (1 write total)
+  if (!sessionFirstAttempts.length) return;
   try {
-    await sb.from("quiz_attempts").insert({
-      module:         attempt.module,
-      subtopic_group: attempt.subtopicGroup,
-      topic_key:      attempt.topicKey,
-      total:          attempt.total,
-      correct:        attempt.correct,
-      pct:            attempt.pct,
+    await fetch(WORKER_URL + '/stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch: sessionFirstAttempts }),
     });
-  } catch(e) { console.warn("DB submit failed:", e); }
+    sessionFirstAttempts = []; // clear after successful submit
+  } catch(e) { console.warn("Stats submit failed:", e); }
 }
 
 async function fetchClassStats(topicKey) {
-  const sb = getSB();
-  if (!sb) return null;
   try {
-    const { data, error } = await sb
-      .from("quiz_attempts")
-      .select("pct")
-      .eq("topic_key", topicKey);
-    if (error || !data || data.length === 0) return null;
-    const avg = data.reduce((s, r) => s + parseFloat(r.pct), 0) / data.length;
-    return { avg: Math.round(avg), n: data.length };
+    const allStats = await fetch(WORKER_URL + '/stats').then(r => r.json());
+    const relevant = Object.values(allStats).filter(s => s.total > 0);
+    if (!relevant.length) return null;
+    const avgPct = relevant.reduce((s, r) => s + (r.correct / r.total) * 100, 0) / relevant.length;
+    const totalAttempts = relevant.reduce((s, r) => s + r.total, 0);
+    return { avg: Math.round(avgPct), n: totalAttempts };
   } catch(e) { return null; }
 }
 
@@ -2666,16 +2661,29 @@ const TOPIC_LABELS = {
 };
 const TOPIC_COLORS = { fluid: "#1565C0", sodium: "#1A6B7E", potassium: "#E65100", acid: "#2E7D32", glomerular: "#4527A0", stones: "#880E4F", mix_ckd_aki: "#0277BD", mix_htn: "#0277BD", mix_gn: "#0277BD", mix_genetics: "#0277BD" };
 
-// ── Visitor counter (localStorage, per-session deduplication) ──
+// ── Visitor counter (shared via Cloudflare Worker, localStorage fallback) ──
+const WORKER_URL = 'https://gint-api.smaberger.workers.dev';
 (function() {
+  const el = document.getElementById('visit-count');
   if (!sessionStorage.getItem('visited')) {
     sessionStorage.setItem('visited', '1');
-    const n = parseInt(localStorage.getItem('visitCount') || '0', 10) + 1;
-    localStorage.setItem('visitCount', n);
+    fetch(WORKER_URL + '/counter', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (el) el.textContent = (d.count || 0).toLocaleString() + ' visits'; })
+      .catch(() => {
+        const n = parseInt(localStorage.getItem('visitCount') || '0', 10) + 1;
+        localStorage.setItem('visitCount', n);
+        if (el) el.textContent = n.toLocaleString() + ' visits';
+      });
+  } else {
+    fetch(WORKER_URL + '/counter')
+      .then(r => r.json())
+      .then(d => { if (el) el.textContent = (d.count || 0).toLocaleString() + ' visits'; })
+      .catch(() => {
+        const count = localStorage.getItem('visitCount') || '1';
+        if (el) el.textContent = parseInt(count, 10).toLocaleString() + ' visits';
+      });
   }
-  const count = localStorage.getItem('visitCount') || '1';
-  const el = document.getElementById('visit-count');
-  if (el) el.textContent = parseInt(count, 10).toLocaleString() + ' visits';
 })();
 
 let questions = [];
@@ -2684,6 +2692,7 @@ let score     = 0;
 let answered  = false;
 let topicStats = {};  // { fluid: {correct:0, total:0}, … }
 let wrongIndices = []; // indices into ALL_QUESTIONS of wrong answers
+let sessionFirstAttempts = []; // [{questionId, correct}] — batch submitted at session end
 let pausedSessions = { eab: null, mix: null, glomerular: null, stones: null };
 
 // ── Exam Simulator state ──
@@ -2790,6 +2799,7 @@ function startQuiz(wrongOnly = false, topicOverride = null) {
   topicStats = {};
   Object.keys(TOPIC_LABELS).forEach(t => topicStats[t] = { correct:0, total:0 });
   wrongIndices = [];
+  sessionFirstAttempts = [];
   const sg = getSessionGroup(questions);
   if (sg) pausedSessions[sg] = null;  // clear only this group's session
   quizPauseable = true;  // this fresh start can be paused
@@ -3215,7 +3225,10 @@ function selectAnswer(idx) {
     return;
   }
 
-  if (idx === q.correct) {
+  const isCorrect = idx === q.correct;
+  sessionFirstAttempts.push({ questionId: q.q.slice(0, 80), correct: isCorrect });
+
+  if (isCorrect) {
     btns[idx].classList.add('correct');
     score++;
     topicStats[q.topic].correct++;
